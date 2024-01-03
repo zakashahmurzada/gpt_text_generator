@@ -1,0 +1,7 @@
+fitz
+os
+streamlit
+sklearn
+spellchecker
+tempfile
+pandas
