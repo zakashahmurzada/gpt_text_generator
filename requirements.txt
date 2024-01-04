@@ -1,7 +1,5 @@
-fitz
-os
 streamlit
-sklearn
-spellchecker
-tempfile
-pandas
+pdfplumber
+openai
+python-docx
+openai==0.28
