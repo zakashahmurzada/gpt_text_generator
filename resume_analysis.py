@@ -1,79 +1,66 @@
 import streamlit as st
-import os
-import fitz  # PyMuPDF
-from sklearn.feature_extraction.text import TfidfVectorizer
-from sklearn.metrics.pairwise import cosine_similarity
-from spellchecker import SpellChecker  # Import the SpellChecker class from pyspellchecker
-import tempfile
-import pandas as pd
+import openai
+import docx  # Library for handling .docx files
+import pdfplumber  # Library for handling .pdf files
 
-st.title("RESUME RANKER")
+# Set your OpenAI API key here
+api_key = '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'
+openai.api_key = api_key
 
-# User input for skills
-skills = st.text_input("Enter Skills (comma-separated):")
+def extract_text_from_docx(file):
+    text = ""
+    try:
+        doc = docx.Document(file)
+        for paragraph in doc.paragraphs:
+            text += paragraph.text + "\n"
+        return text
+    except Exception as e:
+        print(f"Error while extracting text from .docx: {str(e)}")
+        return None
 
-# User input for job description
-job_description = st.text_area("Enter Job Description:")
+def extract_text_from_pdf(file):
+    text = ""
+    try:
+        with pdfplumber.open(file) as pdf:
+            for page in pdf.pages:
+                text += page.extract_text() + "\n"
+        return text
+    except Exception as e:
+        print(f"Error while extracting text from .pdf: {str(e)}")
+        return None
 
-# User input for uploading multiple PDF resumes
-pdf_resumes = st.file_uploader("Upload Resumes/CVs", type=["pdf"], accept_multiple_files=True)
+def query_gpt_3(docx_text, user_query):
+    try:
+        prompt = f"{docx_text}\nUser query: {user_query}\nAI response:"
+        response = openai.Completion.create(
+            engine="text-davinci-003",
+            prompt=prompt,
+            max_tokens=100  # Reducing the completion length
+        )
+        return response.choices[0].text.strip()
+    except Exception as e:
+        return f"Error: {str(e)}"
 
-if st.button("Rank Resumes"):
-    if not pdf_resumes:
-        st.warning("Please upload PDF resumes.")
-    else:
-        skills = [skill.strip() for skill in skills.split(',')]
-        job_description = job_description.lower()
-        resume_data = []
+def main():
+    st.title("GPT-3 Text Generation")
 
-        # Function to extract text from a PDF file using PyMuPDF (fitz)
-        def extract_text_from_pdf(pdf_path):
-            text = ""
-            with fitz.open(pdf_path) as doc:
-                for page in doc:
-                    text += page.get_text()
-            return text
+    uploaded_file = st.file_uploader("Upload a file", type=["docx", "pdf"])
 
-        # Loop through all uploaded PDF resumes and extract text
-        for pdf_resume in pdf_resumes:
-            if pdf_resume.type == "application/pdf":
-                with tempfile.NamedTemporaryFile(delete=False) as temp_pdf:
-                    temp_pdf.write(pdf_resume.read())
-                    temp_pdf_name = temp_pdf.name
-                pdf_text = extract_text_from_pdf(temp_pdf_name).lower()
-                resume_data.append((pdf_resume.name, pdf_text))
-                os.remove(temp_pdf_name)
-
-        if not resume_data:
-            st.warning("No PDF resumes found in the uploaded files.")
+    if uploaded_file is not None:
+        if uploaded_file.type == "application/vnd.openxmlformats-officedocument.wordprocessingml.document":  # Check for .docx MIME type
+            docx_text = extract_text_from_docx(uploaded_file)
+        elif uploaded_file.type == "application/pdf":  # Check for .pdf MIME type
+            docx_text = extract_text_from_pdf(uploaded_file)
         else:
-            resume_rankings = []
+            st.error("Invalid file type. Only .docx and .pdf files are supported.")
+            return
 
-            # Loop through resumes and check for the presence of input skills
-            for resume_name, resume_text in resume_data:
-                matching_skills = [skill for skill in skills if skill.lower() in resume_text]
-                similarity_score =( len(matching_skills) / len(skills)  )# Calculate a simple similarity score
-                missing_skills = [skill for skill in skills if skill.lower() not in resume_text]
+        user_query = st.text_input("Enter your query")
 
-                # Calculate the cosine similarity between job description and resume
-                tfidf_vectorizer = TfidfVectorizer()
-                job_description_matrix = tfidf_vectorizer.fit_transform([job_description])
-                resume_matrix = tfidf_vectorizer.transform([resume_text])
-                job_description_similarity = cosine_similarity(job_description_matrix, resume_matrix)
-                job_description_similarity = (job_description_similarity[0][0])
-                
-                similarity_score = round(similarity_score * 100, 2)
-                job_description_similarity = round(job_description_similarity * 100, 2)
+        if user_query != "":
+            gpt_response = query_gpt_3(docx_text, user_query)
+            st.write("GPT-3 Response:")
+            st.text(gpt_response)
 
-                resume_rankings.append((resume_name, f"{similarity_score}%", f"{job_description_similarity}%", missing_skills))
-
-            # Sort the resumes by similarity score in descending order
-            resume_rankings.sort(key=lambda x: x[1], reverse=True)
-
-            # Create a DataFrame to display the results
-            df = pd.DataFrame(resume_rankings, columns=["File Name", "Skills Match ", "Job Description Match ", "Missing Skills"])
-            
-
-           
-            st.subheader("Ranked Resumes:")
-            st.dataframe(df)
+if __name__ == "__main__":
+    main()
