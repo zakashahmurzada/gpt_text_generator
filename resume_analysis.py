@@ -3,10 +3,6 @@ import openai
 import docx  # Library for handling .docx files
 import pdfplumber  # Library for handling .pdf files
 
-# Set your OpenAI API key here
-api_key = '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'
-openai.api_key = api_key
-
 def extract_text_from_docx(file):
     text = ""
     try:
@@ -29,8 +25,9 @@ def extract_text_from_pdf(file):
         print(f"Error while extracting text from .pdf: {str(e)}")
         return None
 
-def query_gpt_3(docx_text, user_query):
+def query_gpt_3(docx_text, user_query, api_key):
     try:
+        openai.api_key = api_key
         prompt = f"{docx_text}\nUser query: {user_query}\nAI response:"
         response = openai.Completion.create(
             engine="text-davinci-003",
@@ -43,6 +40,8 @@ def query_gpt_3(docx_text, user_query):
 
 def main():
     st.title("GPT-3 Text Generation")
+
+    api_key = st.text_input("Enter your OpenAI API key")
 
     uploaded_file = st.file_uploader("Upload a file", type=["docx", "pdf"])
 
@@ -58,7 +57,7 @@ def main():
         user_query = st.text_input("Enter your query")
 
         if user_query != "":
-            gpt_response = query_gpt_3(docx_text, user_query)
+            gpt_response = query_gpt_3(docx_text, user_query, api_key)
             st.write("GPT-3 Response:")
             st.text(gpt_response)
 
